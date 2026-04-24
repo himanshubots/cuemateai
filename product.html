@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cuemate</title>
+  <style>
+    :root {
+      --bg: #f7fbff;
+      --paper: rgba(255, 255, 255, 0.78);
+      --ink: #182230;
+      --muted: #617083;
+      --line: rgba(24, 34, 48, 0.10);
+      --blue: #246bff;
+      --green: #127a51;
+      --orange: #d9642b;
+      --cyan: #12a7c9;
+      --pink: #ff6da8;
+      --shadow: 0 20px 60px rgba(36, 76, 138, 0.10);
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "SF Pro Display", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(36, 107, 255, 0.14), transparent 30%),
+        radial-gradient(circle at right top, rgba(18, 167, 201, 0.12), transparent 28%),
+        radial-gradient(circle at center right, rgba(255, 109, 168, 0.10), transparent 24%),
+        linear-gradient(180deg, #fbfdff 0%, var(--bg) 100%);
+      overflow-x: hidden;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: auto;
+      width: 420px;
+      height: 420px;
+      border-radius: 50%;
+      filter: blur(70px);
+      pointer-events: none;
+      z-index: -1;
+      opacity: 0.45;
+      animation: drift 14s ease-in-out infinite;
+    }
+
+    body::before {
+      top: -80px;
+      right: -80px;
+      background: rgba(36, 107, 255, 0.18);
+    }
+
+    body::after {
+      left: -100px;
+      bottom: 10%;
+      background: rgba(18, 167, 201, 0.16);
+      animation-delay: -5s;
+    }
+
+    .wrap {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .hero {
+      padding: 72px 0 40px;
+      animation: fadeUp 0.8s ease both;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(36, 107, 255, 0.10);
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 18px 0 12px;
+      font-size: clamp(42px, 7vw, 78px);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+      max-width: 900px;
+    }
+
+    .lead {
+      max-width: 760px;
+      font-size: 20px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border: 1px solid rgba(36, 107, 255, 0.14);
+      background: rgba(36, 107, 255, 0.08);
+      color: var(--blue);
+    }
+
+    .badge.upcoming {
+      color: var(--orange);
+      border-color: rgba(217, 100, 43, 0.18);
+      background: rgba(217, 100, 43, 0.10);
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 28px;
+    }
+
+    .cta {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 20px;
+      border-radius: 14px;
+      text-decoration: none;
+      font-weight: 700;
+      border: 1px solid var(--line);
+    }
+
+    .cta.primary {
+      background: var(--ink);
+      color: white;
+      border-color: transparent;
+    }
+
+    .cta.secondary {
+      background: rgba(255,255,255,0.5);
+      color: var(--ink);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 28px;
+      align-items: stretch;
+      margin-top: 36px;
+    }
+
+    .panel {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+      animation: fadeUp 0.8s ease both;
+    }
+
+    .product-shot {
+      padding: 28px;
+      overflow: hidden;
+    }
+
+    .window {
+      border-radius: 22px;
+      background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+      border: 1px solid rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+
+    .window-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(0,0,0,0.06);
+      background: rgba(246, 250, 255, 0.85);
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #d8c9b8;
+    }
+
+    .window-body {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 460px;
+    }
+
+    .sidebar {
+      padding: 18px;
+      border-right: 1px solid rgba(0,0,0,0.06);
+      background: linear-gradient(180deg, #f5f9ff 0%, #fcfeff 100%);
+    }
+
+    .sidebar-card,
+    .flow,
+    .feature,
+    .stat,
+    .stack-card,
+    .roadmap-card {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.72);
+    }
+
+    .sidebar-card {
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+
+    .content {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .overlay-card {
+      padding: 22px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #22324d 0%, #36557d 60%, #447ba2 100%);
+      color: white;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .overlay-card::after {
+      content: "";
+      position: absolute;
+      inset: -20% auto auto 55%;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      filter: blur(18px);
+    }
+
+    .overlay-card h3 {
+      margin: 0 0 12px;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      color: rgba(255,255,255,0.68);
+      text-transform: uppercase;
+    }
+
+    .overlay-card p {
+      margin: 0 0 14px;
+      line-height: 1.45;
+    }
+
+    .summary {
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .summary h2 {
+      margin: 0;
+      font-size: 32px;
+      line-height: 1.1;
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .summary p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin: 44px 0 18px;
+    }
+
+    .stat {
+      padding: 18px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    .section {
+      padding: 40px 0;
+      animation: fadeUp 0.9s ease both;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--blue);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: clamp(30px, 4vw, 50px);
+      letter-spacing: -0.04em;
+    }
+
+    .section-copy {
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.7;
+    }
+
+    .flow-grid,
+    .feature-grid,
+    .stack-grid,
+    .vision-grid {
+      display: grid;
+      gap: 18px;
+      margin-top: 26px;
+    }
+
+    .flow-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .feature-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .stack-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    .vision-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .flow,
+    .feature,
+    .stack-card,
+    .roadmap-card {
+      padding: 22px;
+      transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+
+    .flow:hover,
+    .feature:hover,
+    .stack-card:hover,
+    .roadmap-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 18px 36px rgba(36, 76, 138, 0.10);
+      border-color: rgba(36, 107, 255, 0.18);
+    }
+
+    .flow h3,
+    .feature h3,
+    .stack-card h3,
+    .roadmap-card h3 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    .flow ul,
+    .roadmap-card ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .feature p,
+    .stack-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .footer {
+      padding: 48px 0 80px;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(18px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+      50% { transform: translate3d(20px, 24px, 0) scale(1.06); }
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .flow-grid,
+      .feature-grid,
+      .stack-grid,
+      .vision-grid,
+      .stats,
+      .window-body {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid rgba(0,0,0,0.06);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Open-Source AI Assistant for Live Work</div>
+      <h1>When the room turns to you, Cuemate helps you stay calm, clear, and ready.</h1>
+      <p class="lead">
+        Cuemate is a privacy-first assistant for meetings, calls, demos, and presentations.
+        It helps you recover context, structure your response, and keep the conversation moving, like a thoughtful mentor sitting beside you during the moments that matter.
+      </p>
+      <div class="pill-row">
+        <span class="badge">Agentic AI</span>
+        <span class="badge">Local-First</span>
+        <span class="badge">Streaming Guidance</span>
+        <span class="badge">Conversational AI</span>
+        <span class="badge upcoming">Upcoming: Multilingual</span>
+        <span class="badge upcoming">Upcoming: Offline Safety Layer</span>
+      </div>
+      <div class="cta-row">
+        <a class="cta primary" href="./README.md">Explore the Project</a>
+        <a class="cta secondary" href="./dist/Cuemate.app">Try the macOS Build</a>
+      </div>
+
+      <div class="hero-grid">
+        <div class="panel product-shot">
+          <div class="window">
+            <div class="window-top">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+            <div class="window-body">
+              <div class="sidebar">
+                <div class="sidebar-card"><strong>Quick Start</strong><br>Install, test, then go live</div>
+                <div class="sidebar-card"><strong>Question / Answer / Action</strong><br>One clean live flow</div>
+                <div class="sidebar-card"><strong>Agentic Copilot</strong><br>Context-aware guidance with memory and next-step intent</div>
+                <div class="sidebar-card"><strong>Review</strong><br>Summaries, actions, history</div>
+              </div>
+              <div class="content">
+                <div class="overlay-card">
+                  <h3>Question</h3>
+                  <p>We were just discussing the rollout plan. Can you take this part?</p>
+                  <h3>Answer</h3>
+                  <p><strong>Yes — the safest path is to start with one focused team, validate adoption quickly, and expand once the process is stable.</strong></p>
+                  <h3>Action</h3>
+                  <p>Confirm who owns the first rollout and what success should look like in the first two weeks.</p>
+                </div>
+                <div class="sidebar-card">
+                  <strong>Streaming guidance</strong><br>
+                  Low-latency draft answers appear while the full response is still forming, so you are not left blank when the conversation turns to you.
+                </div>
+                <div class="sidebar-card">
+                  <strong>Upcoming: multilingual mode</strong><br>
+                  Listen, reason, and respond across more languages without losing speed.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel summary">
+          <div>
+            <h2>Built for the exact moment you lose the thread and still need to respond like you never did.</h2>
+            <p>
+              We all miss things. We all context-switch too much. We all have moments where our name comes up and we need a second to recover.
+              Cuemate is designed for that exact moment, so you can catch up faster, speak more clearly, and stay composed without breaking the flow.
+            </p>
+          </div>
+          <div class="stats">
+            <div class="stat">
+              <strong>Private</strong>
+              <span>Your recordings, transcripts, and local context stay yours.</span>
+            </div>
+            <div class="stat">
+              <strong>Fast</strong>
+              <span>Streaming response previews reduce the time-to-first-help.</span>
+            </div>
+            <div class="stat">
+              <strong>Agentic</strong>
+              <span>Built toward proactive reasoning, memory, and small helpful background tasks.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">Two Clear Flows</div>
+      <h2>Simple enough to trust in the middle of a real conversation.</h2>
+      <p class="section-copy">
+        Cuemate is built around two flows that keep the product simple under pressure: get ready quickly, then rely on one compact answer format that helps you recover context and keep moving.
+      </p>
+      <div class="flow-grid">
+        <div class="flow">
+          <h3>Quick Start</h3>
+          <ul>
+            <li>Install runtime and local models</li>
+            <li>Test microphone, transcript, and overlay position</li>
+            <li>Save your meeting name and speaker identity</li>
+            <li>Start a session when everything feels ready</li>
+          </ul>
+        </div>
+        <div class="flow">
+          <h3>Question / Answer / Action</h3>
+          <ul>
+            <li>Question: what was just asked or what you missed</li>
+            <li>Answer: what you should say now</li>
+            <li>Action: the best next move in the conversation</li>
+            <li>Review: revisit transcript, guidance, and summary later</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">What It Can Do</div>
+      <h2>A local-first assistant for the moments where thinking out loud is not enough.</h2>
+      <div class="feature-grid">
+        <div class="feature">
+          <h3>Live Guidance Layer</h3>
+          <p>Get compact live guidance that helps you stay calm, structured, and ready when the conversation turns to you.</p>
+        </div>
+        <div class="feature">
+          <h3>Live STT Pipeline</h3>
+          <p>Use Apple Speech or `whisper.cpp` to turn live speech into transcript-driven help and faster context recovery.</p>
+        </div>
+        <div class="feature">
+          <h3>Streaming Answers</h3>
+          <p>See draft responses as they form so you can start recovering before the full answer is even finished.</p>
+        </div>
+        <div class="feature">
+          <h3>Meeting Sessions</h3>
+          <p>Capture transcript and guidance history into one session so every meeting leaves behind usable clarity.</p>
+        </div>
+        <div class="feature">
+          <h3>Local Context</h3>
+          <p>Bring in documents and retrieval context so suggestions stay grounded in your actual material and your actual work.</p>
+        </div>
+        <div class="feature">
+          <h3>Open Model Choice</h3>
+          <p>Run local heuristic guidance, Ollama-hosted models, or optional API fallback paths depending on your comfort and workflow.</p>
+        </div>
+        <div class="feature">
+          <h3>Agentic Workflows <span class="badge upcoming">Upcoming</span></h3>
+          <p>Move from one-shot answers to deeper planning, context gathering, and next-step orchestration.</p>
+        </div>
+        <div class="feature">
+          <h3>Multilingual Sessions <span class="badge upcoming">Upcoming</span></h3>
+          <p>Support more languages and more natural switching across global conversations and teams.</p>
+        </div>
+        <div class="feature">
+          <h3>Offline Data Safety <span class="badge upcoming">Upcoming</span></h3>
+          <p>Stronger local-only execution, clearer storage controls, and safer handling for sensitive work.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">Future Vision</div>
+      <h2>From meeting helper to a private, agentic assistant for live work.</h2>
+      <p class="section-copy">
+        Cuemate is moving toward a richer product vision: open-source foundations, privacy-first local execution, conversational AI, and an agentic assistant that can help before, during, and after the meeting without taking your data away from you.
+      </p>
+      <div class="vision-grid">
+        <div class="roadmap-card">
+          <h3>Agentic AI <span class="badge upcoming">Upcoming</span></h3>
+          <ul>
+            <li>Context gathering</li>
+            <li>Conversation intent tracking</li>
+            <li>Suggested follow-up actions</li>
+          </ul>
+        </div>
+        <div class="roadmap-card">
+          <h3>Multilingual <span class="badge upcoming">Upcoming</span></h3>
+          <ul>
+            <li>More languages</li>
+            <li>Better language switching</li>
+            <li>Cross-market usability</li>
+          </ul>
+        </div>
+        <div class="roadmap-card">
+          <h3>Offline Safety <span class="badge upcoming">Upcoming</span></h3>
+          <ul>
+            <li>Local-only workflows</li>
+            <li>Clearer data boundaries</li>
+            <li>Safer sensitive-session defaults</li>
+          </ul>
+        </div>
+        <div class="roadmap-card">
+          <h3>Autonomous Background Help <span class="badge upcoming">Upcoming</span></h3>
+          <ul>
+            <li>Small useful tasks in the background</li>
+            <li>System-level assistance</li>
+            <li>Just say it and let it help</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-title">Open Source</div>
+      <h2>Built to be inspectable, extensible, and genuinely useful.</h2>
+      <div class="stack-grid">
+        <div class="stack-card">
+          <h3>SwiftUI</h3>
+          <p>Native macOS interface with modern Swift patterns.</p>
+        </div>
+        <div class="stack-card">
+          <h3>AppKit</h3>
+          <p>Custom overlay window control where native polish matters.</p>
+        </div>
+        <div class="stack-card">
+          <h3>Local Storage</h3>
+          <p>App support directories, local config, and local session history.</p>
+        </div>
+        <div class="stack-card">
+          <h3>Model Flexibility</h3>
+          <p>Ollama, `whisper.cpp`, Apple Speech, and optional API fallback.</p>
+        </div>
+        <div class="stack-card">
+          <h3>Open Source <span class="badge upcoming">Upcoming</span></h3>
+          <p>A cleaner contributor story, more public docs, and a more community-friendly repo surface.</p>
+        </div>
+        <div class="stack-card">
+          <h3>Offline Models <span class="badge upcoming">Upcoming</span></h3>
+          <p>Deeper support for offline and local model workflows so your work stays under your control.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section footer">
+      <div class="roadmap-card">
+        <h3>Where Cuemate is heading</h3>
+        <ul>
+          <li>Even simpler live flows for real meetings and presentations</li>
+          <li>Stronger runtime install and recovery UX</li>
+          <li>Better speaker and context awareness</li>
+          <li>Agentic memory and session reasoning <span class="badge upcoming">Upcoming</span></li>
+          <li>Multilingual assistance <span class="badge upcoming">Upcoming</span></li>
+          <li>Offline-first safety improvements <span class="badge upcoming">Upcoming</span></li>
+          <li>More test coverage and packaging hardening</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
