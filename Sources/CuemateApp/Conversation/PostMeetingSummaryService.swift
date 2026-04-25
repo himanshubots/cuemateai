@@ -43,12 +43,26 @@ struct MeetingSummary: Codable, Sendable, Equatable {
     }
 }
 
+/// Paired result returned by `generateResult` — carries both the displayable
+/// summary and the follow-up artifact ready for persistence.
+struct SummaryResult: Sendable {
+    let summary: MeetingSummary
+    let followUpArtifact: StoredFollowUpArtifact
+}
+
 struct PostMeetingSummaryService: Sendable {
     private let modeHelper = MeetingModePromptHelper()
     private let draftBuilder = FollowUpDraftBuilder()
     private let recapFormatter = MeetingRecapFormatter()
 
+    /// Returns only the `MeetingSummary`. Existing call sites continue to work unchanged.
     func generateSummary(for session: MeetingSessionRecord, documents: [IngestedDocument]) -> MeetingSummary {
+        generateResult(for: session, documents: documents).summary
+    }
+
+    /// Returns both the `MeetingSummary` and a `StoredFollowUpArtifact` ready for persistence.
+    /// Prefer this over `generateSummary` when the session record will be saved afterwards.
+    func generateResult(for session: MeetingSessionRecord, documents: [IngestedDocument]) -> SummaryResult {
         let transcriptTexts = session.transcriptSegments
             .sorted { $0.createdAt < $1.createdAt }
             .map(\.text)
@@ -56,7 +70,6 @@ struct PostMeetingSummaryService: Sendable {
         let fullTranscript = transcriptTexts.joined(separator: " ")
         let signals = modeHelper.extractSignals(from: fullTranscript)
 
-        // Mode-aware structured overview via MeetingRecapFormatter
         let recapInput = MeetingRecapFormatter.RecapInput(
             meetingType: session.configuration.meetingType,
             transcriptTexts: transcriptTexts,
@@ -81,7 +94,7 @@ struct PostMeetingSummaryService: Sendable {
         )
         let builtDraft = draftBuilder.build(from: draftInput)
 
-        return MeetingSummary(
+        let summary = MeetingSummary(
             overview: overview,
             keyTopics: Array(keyTopics.prefix(5)),
             actionItems: Array(actionItems.prefix(5)),
@@ -90,6 +103,14 @@ struct PostMeetingSummaryService: Sendable {
             followUpSubject: builtDraft.subject,
             decisionSummary: decisionSummary
         )
+
+        let artifact = StoredFollowUpArtifact(
+            subject: builtDraft.subject,
+            body: builtDraft.body,
+            generatedAt: Date()
+        )
+
+        return SummaryResult(summary: summary, followUpArtifact: artifact)
     }
 
     // MARK: - Key topic extraction

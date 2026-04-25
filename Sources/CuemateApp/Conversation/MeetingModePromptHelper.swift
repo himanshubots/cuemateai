@@ -61,7 +61,8 @@ struct MeetingModePromptHelper: Sendable {
         }
     }
 
-    /// System prompt section for AI prompt builders (used by Ollama and OpenAI services).
+    /// System prompt section for live AI guidance builders (Ollama, OpenAI).
+    /// Describes the mode objective and key signals to watch during the meeting.
     func systemPromptSection(for meetingType: String) -> String {
         let obj = coachingObjective(for: meetingType)
         let sigs = successSignals(for: meetingType).joined(separator: ", ")
@@ -69,6 +70,51 @@ struct MeetingModePromptHelper: Sendable {
         Mode (\(meetingType)): \(obj)
         Key signals to watch: \(sigs)
         """
+    }
+
+    /// Prompt section for AI-backed pre-meeting brief generation.
+    /// Describes the mode goal, focus areas, likely risks, and available context flags.
+    /// Use this when building a prompt that should produce a structured pre-meeting brief.
+    func preMeetingPromptSection(
+        for meetingType: String,
+        hasDocs: Bool,
+        hasPriorSession: Bool
+    ) -> String {
+        let obj = coachingObjective(for: meetingType)
+        let areas = summaryFocusAreas(for: meetingType).prefix(3).joined(separator: ", ")
+        let risks = preMeetingRisksLine(for: meetingType)
+
+        var lines: [String] = [
+            "Pre-meeting mode (\(meetingType)):",
+            "Session goal: \(obj)",
+            "Focus areas: \(areas)",
+            "Likely risks: \(risks)",
+        ]
+        if hasDocs {
+            lines.append("Attached documents available — surface specific relevant context from them.")
+        }
+        if hasPriorSession {
+            lines.append("Prior session of this type exists — reference continuity context where relevant.")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// One-line risks summary used by `preMeetingPromptSection`.
+    private func preMeetingRisksLine(for meetingType: String) -> String {
+        switch meetingType {
+        case "sales":
+            return "budget gating, missing decision-maker, timeline misalignment"
+        case "demo":
+            return "workflow mismatch, integration objection, unprepared use case"
+        case "client-review":
+            return "invisible progress, undiscussed risk, scope drift"
+        case "interview":
+            return "unprepared example, narrower requirements, experience gap"
+        case "internal-sync":
+            return "stalled decision, unclear ownership, external dependencies"
+        default:
+            return "goal drift, decision not reached"
+        }
     }
 
     /// Focus areas for post-meeting summaries in this mode.

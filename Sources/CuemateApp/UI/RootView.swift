@@ -381,6 +381,7 @@ struct StartSessionWorkspaceView: View {
                 CompactMetric(title: "Response", value: providerLabel(model.generationProvider))
                 CompactMetric(title: "Intent", value: model.detectedIntent.title)
                 CompactMetric(title: "Mode", value: model.suggestedResponseMode.title)
+                CompactMetric(title: "Signal", value: model.confidenceScoreLabel)
                 CompactMetric(title: "Voice", value: model.voiceActivityState.rawValue.capitalized)
             }
         }
@@ -395,6 +396,8 @@ struct StartSessionWorkspaceView: View {
                 DetailBlock(title: "Suggested Mode", text: model.suggestedResponseMode.title)
                 DetailBlock(title: "Cue", text: model.coachingCue)
                 DetailBlock(title: "Confidence Advice", text: model.confidenceAdvice)
+                DetailBlock(title: "Signal Read", text: model.confidenceSignalSummary)
+                DetailBlock(title: "Context Read", text: model.liveContextSummary)
                 if let step = model.interruptionRecoveryStep {
                     DetailBlock(title: "Re-entry", text: step)
                 }

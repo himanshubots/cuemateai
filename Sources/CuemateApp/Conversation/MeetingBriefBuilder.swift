@@ -337,3 +337,36 @@ struct MeetingBriefBuilder: Sendable {
         return formatter.string(from: date)
     }
 }
+
+// MARK: - BriefInput convenience factory
+
+extension MeetingBriefBuilder.BriefInput {
+    /// Builds a `BriefInput` from a `DocumentLibrarySnapshot` and a list of session document IDs.
+    /// Filters the snapshot internally so call sites do not need to pre-filter docs or chunks.
+    ///
+    /// Usage:
+    /// ```swift
+    /// let input = MeetingBriefBuilder.BriefInput.from(
+    ///     configuration: session.configuration,
+    ///     snapshot: librarySnapshot,
+    ///     documentIDs: session.documentIDs,
+    ///     priorSessions: allSessions
+    /// )
+    /// let brief = MeetingBriefBuilder().build(from: input)
+    /// ```
+    static func from(
+        configuration: MeetingConfiguration,
+        snapshot: DocumentLibrarySnapshot,
+        documentIDs: [UUID],
+        priorSessions: [MeetingSessionRecord]
+    ) -> Self {
+        let idSet = Set(documentIDs)
+        let attached = snapshot.documents.filter { idSet.contains($0.id) }
+        return Self(
+            configuration: configuration,
+            attachedDocuments: attached,
+            documentChunks: snapshot.chunks,
+            priorSessions: priorSessions
+        )
+    }
+}
