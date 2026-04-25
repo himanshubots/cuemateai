@@ -5,28 +5,67 @@ struct MeetingSummary: Codable, Sendable, Equatable {
     var keyTopics: [String]
     var actionItems: [String]
     var outcomeNote: String
+    /// The full formatted follow-up (subject line + body) for backward compatibility.
     var followUpDraft: String
+    /// Subject line extracted as a first-class field for UI display.
+    var followUpSubject: String
     var decisionSummary: String
+
+    init(
+        overview: String,
+        keyTopics: [String],
+        actionItems: [String],
+        outcomeNote: String,
+        followUpDraft: String,
+        followUpSubject: String = "",
+        decisionSummary: String
+    ) {
+        self.overview = overview
+        self.keyTopics = keyTopics
+        self.actionItems = actionItems
+        self.outcomeNote = outcomeNote
+        self.followUpDraft = followUpDraft
+        self.followUpSubject = followUpSubject
+        self.decisionSummary = decisionSummary
+    }
+
+    /// Custom decoder to stay backward compatible with sessions saved before
+    /// `followUpSubject` was added — those will decode to an empty string.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        overview = try c.decode(String.self, forKey: .overview)
+        keyTopics = try c.decode([String].self, forKey: .keyTopics)
+        actionItems = try c.decode([String].self, forKey: .actionItems)
+        outcomeNote = try c.decode(String.self, forKey: .outcomeNote)
+        followUpDraft = try c.decode(String.self, forKey: .followUpDraft)
+        followUpSubject = (try? c.decode(String.self, forKey: .followUpSubject)) ?? ""
+        decisionSummary = try c.decode(String.self, forKey: .decisionSummary)
+    }
 }
 
 struct PostMeetingSummaryService: Sendable {
     private let modeHelper = MeetingModePromptHelper()
     private let draftBuilder = FollowUpDraftBuilder()
+    private let recapFormatter = MeetingRecapFormatter()
 
     func generateSummary(for session: MeetingSessionRecord, documents: [IngestedDocument]) -> MeetingSummary {
         let transcriptTexts = session.transcriptSegments
             .sorted { $0.createdAt < $1.createdAt }
             .map(\.text)
 
-        let guidanceTexts = session.guidanceHistory
-            .sorted { $0.createdAt < $1.createdAt }
-            .map(\.content.nowSay)
-
-        let combinedTexts = transcriptTexts + guidanceTexts
         let fullTranscript = transcriptTexts.joined(separator: " ")
         let signals = modeHelper.extractSignals(from: fullTranscript)
 
-        let summaryText = summarize(combinedTexts.joined(separator: " "), wordLimit: 40)
+        // Mode-aware structured overview via MeetingRecapFormatter
+        let recapInput = MeetingRecapFormatter.RecapInput(
+            meetingType: session.configuration.meetingType,
+            transcriptTexts: transcriptTexts,
+            signals: signals,
+            transcriptCount: session.transcriptSegments.count,
+            guidanceCount: session.guidanceHistory.count
+        )
+        let overview = recapFormatter.buildOverview(from: recapInput)
+
         let keyTopics = extractKeyTopics(from: transcriptTexts, meetingType: session.configuration.meetingType)
         let actionItems = buildActionItems(from: session, documents: documents, signals: signals, transcriptTexts: transcriptTexts)
         let outcomeNote = deriveOutcome(from: session, signals: signals)
@@ -40,14 +79,15 @@ struct PostMeetingSummaryService: Sendable {
             keyTopics: keyTopics,
             decisionSummary: decisionSummary
         )
-        let followUpDraft = draftBuilder.build(from: draftInput).formatted
+        let builtDraft = draftBuilder.build(from: draftInput)
 
         return MeetingSummary(
-            overview: summaryText.isEmpty ? fallbackOverview(for: session) : summaryText,
+            overview: overview,
             keyTopics: Array(keyTopics.prefix(5)),
             actionItems: Array(actionItems.prefix(5)),
             outcomeNote: outcomeNote,
-            followUpDraft: followUpDraft,
+            followUpDraft: builtDraft.formatted,
+            followUpSubject: builtDraft.subject,
             decisionSummary: decisionSummary
         )
     }
@@ -310,20 +350,6 @@ struct PostMeetingSummaryService: Sendable {
     }
 
     // MARK: - Helpers
-
-    private func fallbackOverview(for session: MeetingSessionRecord) -> String {
-        let mode = session.configuration.meetingType.replacingOccurrences(of: "-", with: " ")
-        let tCount = session.transcriptSegments.count
-        let gCount = session.guidanceHistory.count
-        return "A \(mode) session with \(tCount) transcript segment\(tCount == 1 ? "" : "s") and \(gCount) live guidance moment\(gCount == 1 ? "" : "s")."
-    }
-
-    private func summarize(_ text: String, wordLimit: Int) -> String {
-        text
-            .split(whereSeparator: \.isWhitespace)
-            .prefix(wordLimit)
-            .joined(separator: " ")
-    }
 
     private func tokenize(_ text: String) -> [String] {
         text.lowercased()

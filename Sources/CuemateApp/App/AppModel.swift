@@ -197,6 +197,12 @@ enum ResponseMode: String, Sendable {
     }
 }
 
+struct PlaybookStep: Identifiable, Sendable, Equatable {
+    let id = UUID()
+    let title: String
+    let detail: String
+}
+
 enum ConversationAction: String, CaseIterable, Identifiable {
     case toggleOverlay
     case pauseResume
@@ -836,6 +842,136 @@ final class AppModel: ObservableObject {
         detectIntent(from: latestQuestionText)
     }
 
+    var suggestedResponseMode: ResponseMode {
+        switch detectedIntent {
+        case .pricing, .objection:
+            return .safe
+        case .decision, .nextStep:
+            return .close
+        case .proof:
+            return .proof
+        case .clarification:
+            return .consultative
+        case .general:
+            return .direct
+        }
+    }
+
+    var coachingCue: String {
+        if overlayState == .recovery {
+            return "Answer short first, then ask one clarifying question."
+        }
+
+        if manualInterruptionActive {
+            return "You were interrupted. Re-enter with one short sentence and then take control with a focused follow-up."
+        }
+
+        if overlayState == .speaking && teleprompterProgress > 0.65 {
+            return "Land the point now and stop cleanly."
+        }
+
+        switch detectedIntent {
+        case .pricing:
+            return "Do not defend price first. Frame value, scope, and rollout size."
+        case .objection:
+            return "Lower the risk. Acknowledge concern, then give the simplest safe path."
+        case .decision:
+            return "Push toward commitment. Name the next step and who owns it."
+        case .clarification:
+            return "Answer directly first, then add one supporting detail."
+        case .proof:
+            return "Use one concrete example or proof point, not three."
+        case .nextStep:
+            return "Make the next step specific: owner, timeline, and outcome."
+        case .general:
+            return "Keep it short, clear, and easy to act on."
+        }
+    }
+
+    var confidenceAdvice: String {
+        if manualInterruptionActive {
+            return "Re-enter safely: one short sentence, then confirm the next point."
+        }
+
+        switch guidanceConfidence {
+        case .low:
+            return "Context is thin. Stay safe and ask a clarifying question."
+        case .medium:
+            return "Good enough to answer directly, but keep one follow-up ready."
+        case .high:
+            return "Context is strong. Answer directly and close on the next step."
+        }
+    }
+
+    var activePlaybookTitle: String {
+        switch detectedIntent {
+        case .objection:
+            return "Objection Playbook"
+        case .decision:
+            return "Decision Playbook"
+        case .pricing:
+            return "Pricing Playbook"
+        case .nextStep:
+            return "Next-Step Playbook"
+        default:
+            return "Response Playbook"
+        }
+    }
+
+    var activePlaybookSteps: [PlaybookStep] {
+        switch detectedIntent {
+        case .objection:
+            return [
+                PlaybookStep(title: "Acknowledge", detail: "Show that you understand the concern before pushing a solution."),
+                PlaybookStep(title: "Reduce Risk", detail: "Offer the smallest safe path instead of the full commitment."),
+                PlaybookStep(title: "Reconfirm Goal", detail: "Tie the answer back to the result they actually care about.")
+            ]
+        case .decision:
+            return [
+                PlaybookStep(title: "State The Move", detail: "Name the clearest next decision in one sentence."),
+                PlaybookStep(title: "Make It Small", detail: "Keep the next commitment easy to say yes to."),
+                PlaybookStep(title: "Assign Ownership", detail: "Close with who owns the next step and when it happens.")
+            ]
+        case .pricing:
+            return [
+                PlaybookStep(title: "Frame Scope", detail: "Talk about the right initial scope before defending price."),
+                PlaybookStep(title: "Connect Value", detail: "Tie spend to adoption, outcome, or rollout size."),
+                PlaybookStep(title: "Qualify Budget", detail: "Ask what range or first-team size they have in mind.")
+            ]
+        case .nextStep:
+            return [
+                PlaybookStep(title: "Choose One Step", detail: "Do not leave with multiple parallel actions."),
+                PlaybookStep(title: "Set Timeline", detail: "Make the next step date-bound if possible."),
+                PlaybookStep(title: "Confirm Outcome", detail: "Name what success looks like after the next step.")
+            ]
+        case .clarification, .proof, .general:
+            return [
+                PlaybookStep(title: "Answer First", detail: "Lead with the short direct answer."),
+                PlaybookStep(title: "Support Lightly", detail: "Add only one supporting point unless they ask for more."),
+                PlaybookStep(title: "Keep Momentum", detail: "End with one useful follow-up move.")
+            ]
+        }
+    }
+
+    var playbookRiskToAvoid: String {
+        switch detectedIntent {
+        case .objection:
+            return "Do not argue or over-explain before reducing the perceived risk."
+        case .decision:
+            return "Do not end with a vague next step or no owner."
+        case .pricing:
+            return "Do not defend price in isolation from scope and value."
+        case .nextStep:
+            return "Do not leave the next step open-ended."
+        case .clarification:
+            return "Do not bury the answer inside too much background."
+        case .proof:
+            return "Do not give too many examples. Use one strong proof point."
+        case .general:
+            return "Do not turn a short answer into a long monologue."
+        }
+    }
+
     var recommendedTranscriptionProvider: TranscriptionProvider {
         dependencyStatus(for: "whisper-runtime") == .ready && dependencyStatus(for: "whisper-model") == .ready
             ? .whisperCpp
@@ -1044,10 +1180,15 @@ final class AppModel: ObservableObject {
         }
         isStreamingResponse = false
 
+        let latestQuestion = request.transcriptSegments.first(where: {
+            normalizedSpeakerName($0.speaker) != normalizedSpeakerName(userDisplayName)
+        })?.text ?? latestTranscriptText
+        let intent = detectIntent(from: latestQuestion)
+
         overlayContent = OverlayContent(
-            nowSay: shapedPrimaryResponse(from: response.primary, confidence: confidence),
-            why: shapedReason(from: response.why, confidence: confidence),
-            next: response.next
+            nowSay: shapedPrimaryResponse(from: response.primary, confidence: confidence, intent: intent),
+            why: shapedReason(from: response.why, confidence: confidence, intent: intent),
+            next: shapedNextStep(from: response.next, intent: intent)
         )
         guidanceConfidence = confidence
         overlayState = .answerReady
@@ -1692,7 +1833,11 @@ final class AppModel: ObservableObject {
             normalizedSpeakerName($0.speaker) != normalizedSpeakerName(userDisplayName)
         })?.text ?? latestTranscriptText
 
-        if !request.retrievalResults.isEmpty, isDirectQuestion(latestQuestion) {
+        if manualInterruptionActive {
+            return .low
+        }
+
+        if !request.retrievalResults.isEmpty, isDirectQuestion(latestQuestion), latestQuestion.count > 20 {
             return .high
         }
 
@@ -1703,25 +1848,137 @@ final class AppModel: ObservableObject {
         return .low
     }
 
-    private func shapedPrimaryResponse(from text: String, confidence: GuidanceConfidence) -> String {
+    private func shapedPrimaryResponse(from text: String, confidence: GuidanceConfidence, intent: LiveIntent) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sentence = firstSentence(in: trimmed)
+        let interrupted = manualInterruptionActive
+        let lowConfidence = confidence == .low
+
+        switch intent {
+        case .objection:
+            let base = sentence.isEmpty
+                ? "That concern makes sense. The safest path is to reduce risk with one focused step first."
+                : sentence
+            if interrupted || lowConfidence {
+                return "That concern makes sense. The safest next step is to keep the scope small and reduce risk first."
+            }
+            return ensureTwoSentenceShape(
+                primary: base,
+                followUp: "We can keep the scope small, prove value quickly, and expand only after it works."
+            )
+        case .decision:
+            let base = sentence.isEmpty
+                ? "The best next move is to make the next commitment small and clear."
+                : sentence
+            if interrupted || lowConfidence {
+                return "The best next move is to make the next step small, clear, and easy to own now."
+            }
+            return ensureTwoSentenceShape(
+                primary: base,
+                followUp: "If this direction makes sense, the next step is to lock the owner and timing now."
+            )
+        case .pricing:
+            let base = sentence.isEmpty
+                ? "The right way to think about price is through the starting scope and the value we need to prove first."
+                : sentence
+            if interrupted || lowConfidence {
+                return "The best way to frame price is through the starting scope and the value we need to prove first."
+            }
+            return ensureTwoSentenceShape(
+                primary: base,
+                followUp: "We should size the first rollout around the smallest team that can validate the outcome."
+            )
+        case .nextStep:
+            let base = sentence.isEmpty
+                ? "The clearest answer is to leave this meeting with one specific next step."
+                : sentence
+            if interrupted || lowConfidence {
+                return "The clearest answer is to leave with one specific next step, one owner, and one timeline."
+            }
+            return ensureTwoSentenceShape(
+                primary: base,
+                followUp: "Let us make that next step concrete with an owner, timeline, and expected outcome."
+            )
+        case .proof:
+            let base = sentence.isEmpty
+                ? "The clearest way to answer that is with one concrete proof point."
+                : sentence
+            if interrupted || lowConfidence {
+                return "The clearest way to answer that is with one concrete proof point tied to the result they care about."
+            }
+            return ensureTwoSentenceShape(
+                primary: base,
+                followUp: "The important thing is to connect the example directly to the result they care about."
+            )
+        case .clarification, .general:
+            break
+        }
+
         guard confidence == .low else { return trimmed }
 
         if trimmed.isEmpty {
             return "The short answer is to confirm the goal, give the safest next step, and clarify what matters most."
         }
 
-        let firstSentence = trimmed
-            .split(separator: ".")
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? trimmed
-
-        return firstSentence.hasSuffix(".") ? firstSentence : firstSentence + "."
+        return sentence.hasSuffix(".") ? sentence : sentence + "."
     }
 
-    private func shapedReason(from text: String, confidence: GuidanceConfidence) -> String {
-        guard confidence == .low else { return text }
-        return "Context is still limited, so this keeps the answer safe, short, and easy to defend."
+    private func shapedReason(from text: String, confidence: GuidanceConfidence, intent: LiveIntent) -> String {
+        if manualInterruptionActive {
+            return "You were interrupted, so the answer is intentionally shorter and safer to help you re-enter cleanly."
+        }
+
+        switch intent {
+        case .objection:
+            return "Treat this like a risk-reduction moment: acknowledge concern, simplify scope, and avoid arguing."
+        case .decision:
+            return "Treat this like a commitment moment: make the move small, clear, and easy to own."
+        case .pricing:
+            return "Treat this like a value-and-scope conversation, not a raw price defense."
+        case .nextStep:
+            return "Treat this like a closing moment: leave with one specific next action."
+        case .proof:
+            return "Treat this like a proof moment: use one concrete example instead of broad explanation."
+        case .clarification, .general:
+            guard confidence == .low else { return text }
+            return "Context is still limited, so this keeps the answer safe, short, and easy to defend."
+        }
+    }
+
+    private func shapedNextStep(from text: String, intent: LiveIntent) -> String {
+        if manualInterruptionActive {
+            return "Re-enter with one short sentence, then confirm the exact point they want next."
+        }
+
+        switch intent {
+        case .objection:
+            return "Ask what feels riskiest or hardest from their side right now."
+        case .decision:
+            return "Ask whether they are comfortable locking the owner and timing for the next step."
+        case .pricing:
+            return "Ask what initial team size or budget range they want to start with."
+        case .nextStep:
+            return "Ask who owns the next step, what date it happens, and what success looks like."
+        case .proof:
+            return "Ask whether they want a concrete example, a customer proof point, or a short walkthrough."
+        case .clarification, .general:
+            return text
+        }
+    }
+
+    private func ensureTwoSentenceShape(primary: String, followUp: String) -> String {
+        let first = primary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let second = followUp.trimmingCharacters(in: .whitespacesAndNewlines)
+        let firstSentence = first.hasSuffix(".") ? first : first + "."
+        let secondSentence = second.hasSuffix(".") ? second : second + "."
+        return "\(firstSentence) \(secondSentence)"
+    }
+
+    private func firstSentence(in text: String) -> String {
+        text
+            .split(separator: ".")
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? text
     }
 
     private func shouldUseRecoveryMode(for segment: TranscriptSegment) -> Bool {

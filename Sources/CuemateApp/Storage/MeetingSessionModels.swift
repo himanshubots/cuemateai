@@ -1,5 +1,13 @@
 import Foundation
 
+/// A Codable follow-up artifact stored alongside a session record.
+/// Optional field — old sessions decode it as nil without breaking.
+struct StoredFollowUpArtifact: Codable, Sendable, Equatable {
+    var subject: String
+    var body: String
+    var generatedAt: Date
+}
+
 struct GuidanceSnapshot: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
     let createdAt: Date
@@ -20,6 +28,9 @@ struct MeetingSessionRecord: Identifiable, Codable, Sendable, Equatable {
     var documentIDs: [UUID]
     var summary: MeetingSummary?
     var followUpNotes: String
+    /// Stored follow-up artifact generated after the meeting ends.
+    /// Nil for sessions created before this field was added.
+    var followUpArtifact: StoredFollowUpArtifact?
 
     var isActive: Bool {
         endedAt == nil

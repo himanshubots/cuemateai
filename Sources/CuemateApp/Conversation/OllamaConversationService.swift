@@ -23,6 +23,8 @@ enum OllamaConversationError: LocalizedError {
 }
 
 struct OllamaConversationService: Sendable {
+    private let modeHelper = MeetingModePromptHelper()
+
     func generate(from input: OllamaGenerationRequest) async throws -> ConversationResponse {
         guard let url = URL(string: "http://127.0.0.1:11434/api/generate") else {
             throw OllamaConversationError.invalidURL
@@ -124,10 +126,11 @@ struct OllamaConversationService: Sendable {
         let sources = request.retrievalResults.prefix(3).map { result in
             "[\(result.document.fileName)] \(result.chunk.text)"
         }.joined(separator: "\n")
+        let modeGuidance = modeHelper.systemPromptSection(for: request.configuration.meetingType)
 
         return """
         You are a live meeting copilot.
-        The answer must feel like a calm premium assistant for a high-pressure meeting.
+        Respond like a calm, premium assistant in a high-pressure meeting.
         Keep the primary answer to 1-2 short sentences. Prefer clarity over completeness.
 
         Meeting configuration:
@@ -144,12 +147,7 @@ struct OllamaConversationService: Sendable {
         Retrieved context:
         \(sources.isEmpty ? "None" : sources)
 
-        Meeting mode guidance:
-        - sales: emphasize business outcome, pilot framing, and next step.
-        - demo: emphasize workflow value and what to show next.
-        - client-review: emphasize progress, risk, trust, and next action.
-        - interview: emphasize direct answer, outcome, and concise example.
-        - internal-sync: emphasize decision, owner, blocker, and alignment.
+        \(modeGuidance)
 
         Return strict JSON with keys:
         - primary: exactly what the user should say now

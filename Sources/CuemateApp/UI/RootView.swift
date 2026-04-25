@@ -97,6 +97,8 @@ struct StartSessionWorkspaceView: View {
 
                 VStack(alignment: .leading, spacing: 20) {
                     transcriptCard
+                    coachingCard
+                    playbookCard
                     activityStatusCard
                 }
                 .frame(width: 360, alignment: .top)
@@ -377,7 +379,47 @@ struct StartSessionWorkspaceView: View {
                 CompactMetric(title: "Transcription", value: model.transcriptionProvider.title)
                 CompactMetric(title: "Response", value: providerLabel(model.generationProvider))
                 CompactMetric(title: "Intent", value: model.detectedIntent.title)
+                CompactMetric(title: "Mode", value: model.suggestedResponseMode.title)
                 CompactMetric(title: "Voice", value: model.voiceActivityState.rawValue.capitalized)
+            }
+        }
+    }
+
+    private var coachingCard: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Coach")
+                    .font(.title3.weight(.semibold))
+
+                DetailBlock(title: "Suggested Mode", text: model.suggestedResponseMode.title)
+                DetailBlock(title: "Cue", text: model.coachingCue)
+                DetailBlock(title: "Confidence Advice", text: model.confidenceAdvice)
+            }
+        }
+    }
+
+    private var playbookCard: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(model.activePlaybookTitle)
+                    .font(.title3.weight(.semibold))
+
+                ForEach(model.activePlaybookSteps) { step in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(step.title)
+                            .font(.subheadline.weight(.semibold))
+                        Text(step.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor))
+                    )
+                }
+
+                DetailBlock(title: "Avoid", text: model.playbookRiskToAvoid)
             }
         }
     }
