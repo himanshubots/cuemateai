@@ -40,7 +40,7 @@ Every completed session leaves behind a full record: overview, key topics, actio
 
 ### Settings
 
-Configure your transcription path (Apple Speech or `whisper.cpp`), your AI provider (local heuristic, Ollama, or OpenAI), your speaker identity, and your OpenAI API key (stored in Keychain).
+Configure your transcription path (Apple Speech or `whisper.cpp`), your AI provider (local heuristic, Ollama, or OpenAI), your speaker identity, your preferred answer style (balanced / safe / assertive / consultative), and your OpenAI API key (stored in Keychain).
 
 ## What Cuemate Does Today
 
@@ -52,6 +52,9 @@ Configure your transcription path (Apple Speech or `whisper.cpp`), your AI provi
 - AI brief enrichment via Ollama (local) or OpenAI (optional)
 - Live guidance with intent detection, objection/decision playbooks, and interruption recovery
 - Signal-based confidence scoring that shapes live answer behavior
+- Mode focus and risk cues in the live coaching card for all six meeting types
+- Preferred answer style: bias live guidance toward balanced, safe, assertive, or consultative
+- Recurring session memory: start-session workspace surfaces recent outcome, themes, and decision patterns from prior sessions of the same type
 - Post-meeting summaries: overview, key topics, action items, decision summary, outcome note
 - Follow-up draft generation with subject line
 - Session history browser with all artifacts persisted locally
@@ -79,13 +82,16 @@ Configure your transcription path (Apple Speech or `whisper.cpp`), your AI provi
 - Ollama and OpenAI brief generation with heuristic fallback
 - Document-backed retrieval context
 - Signal-based live intelligence and playbook guidance
+- Mode-specific focus and risk cues in the live coaching layer
+- Preferred answer style setting (balanced / safe / assertive / consultative)
+- Lightweight recurring session memory at session start
 - Privacy transparency in Settings
 
 ### Upcoming
 
 - Agentic AI workflows: background context gathering, next-step planning, proactive assistance
 - Multilingual support: listen and assist across more languages
-- Deeper session memory: reusable context that improves suggestions over time
+- Deeper cross-session memory and personalization: richer reuse of past decisions and patterns
 - Stronger offline safety: clearer storage controls and local-only defaults
 - Open-source contributor mode: easier local setup and a cleaner public repo experience
 

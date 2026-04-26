@@ -99,6 +99,7 @@ struct StartSessionWorkspaceView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     transcriptCard
                     coachingCard
+                    riskFlagsCard
                     playbookCard
                     activityStatusCard
                 }
@@ -243,8 +244,46 @@ struct StartSessionWorkspaceView: View {
                     StatusDot(title: model.liveDecisionCue, color: liveDecisionColor(model.liveDecisionCue))
                     StatusDot(title: model.liveResponseState, color: .orange)
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Quick Steering")
+                        .font(.subheadline.weight(.semibold))
+
+                    HStack(spacing: 10) {
+                        quickStyleButton(title: "Balanced", active: model.confidenceMode == "balanced") {
+                            model.setPreferredResponseStyle("balanced")
+                        }
+                        quickStyleButton(title: "Safe", active: model.confidenceMode == "safe") {
+                            model.setPreferredResponseStyle("safe")
+                        }
+                        quickStyleButton(title: "Assertive", active: model.confidenceMode == "assertive") {
+                            model.setPreferredResponseStyle("assertive")
+                        }
+                        quickStyleButton(title: "Consultative", active: model.confidenceMode == "consultative") {
+                            model.setPreferredResponseStyle("consultative")
+                        }
+                    }
+                }
             }
         }
+    }
+
+    private func quickStyleButton(title: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(active ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(active ? Color.accentColor.opacity(0.4) : Color.black.opacity(0.06), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private var preMeetingBriefCard: some View {
@@ -461,6 +500,27 @@ struct StartSessionWorkspaceView: View {
 
                 DetailBlock(title: "Mode Risk", text: model.meetingModeRiskSummary)
                 DetailBlock(title: "Avoid", text: model.playbookRiskToAvoid)
+            }
+        }
+    }
+
+    private var riskFlagsCard: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text("Watchouts")
+                        .font(.title3.weight(.semibold))
+                    Spacer()
+                    StatusDot(title: model.liveRiskFlags.isEmpty ? "Stable" : "Active", color: model.liveRiskFlags.isEmpty ? .green : .orange)
+                }
+
+                if model.liveRiskFlags.isEmpty {
+                    EmptyStateCard(text: "No active watchouts right now. The live read looks stable.")
+                } else {
+                    ForEach(model.liveRiskFlags, id: \.self) { flag in
+                        BulletLine(text: flag)
+                    }
+                }
             }
         }
     }

@@ -255,6 +255,13 @@ struct PlaybookStep: Identifiable, Sendable, Equatable {
     let detail: String
 }
 
+struct SessionDiagnostics: Sendable, Equatable {
+    var recoveryEvents = 0
+    var lowConfidenceEvents = 0
+    var interruptionEvents = 0
+    var providerFallbackEvents = 0
+}
+
 enum ConversationAction: String, CaseIterable, Identifiable {
     case toggleOverlay
     case pauseResume
@@ -492,6 +499,7 @@ final class AppModel: ObservableObject {
     @Published var meetingSessions: [MeetingSessionRecord] = []
     @Published var selectedSessionID: UUID?
     @Published var historyState = HistoryState(sessions: [], documents: [])
+    @Published var sessionDiagnostics = SessionDiagnostics()
 
     let appPaths: AppPaths
 
@@ -709,6 +717,42 @@ final class AppModel: ObservableObject {
             next: "Ask what would block a pilot decision this week."
         )
         appendLog("Shifted guidance to a more confident tone")
+    }
+
+    func setPreferredResponseStyle(_ style: String) {
+        confidenceMode = style
+
+        switch style {
+        case "safe":
+            configuration.tone = "balanced"
+            overlayContent = OverlayContent(
+                nowSay: "The safest next step is to keep this small, answer directly, and verify what matters most before committing further.",
+                why: "Shifts the response toward lower-risk language for uncertain or sensitive moments.",
+                next: "Ask one short clarifying question before moving further."
+            )
+            appendLog("Shifted guidance to a safer style")
+        case "assertive":
+            markMoreConfident()
+        case "consultative":
+            configuration.tone = "balanced"
+            overlayContent = OverlayContent(
+                nowSay: "The best move is to answer directly, then guide the conversation with one focused follow-up question.",
+                why: "Shifts the response toward collaborative framing without losing momentum.",
+                next: "Ask what outcome matters most from their side right now."
+            )
+            appendLog("Shifted guidance to a consultative style")
+        default:
+            confidenceMode = "balanced"
+            configuration.tone = meetingMode.defaultTone
+            overlayContent = OverlayContent(
+                nowSay: "Give the clearest short answer first, then add only the detail that helps the decision.",
+                why: "Returns the response to a balanced default shape for most live moments.",
+                next: "Ask one focused follow-up to confirm what matters most."
+            )
+            appendLog("Shifted guidance to a balanced style")
+        }
+
+        overlayState = .answerReady
     }
 
     func togglePause() {
@@ -1067,6 +1111,40 @@ final class AppModel: ObservableObject {
         case .general:
             return "Do not add more detail than the decision actually needs."
         }
+    }
+
+    var liveRiskFlags: [String] {
+        var flags: [String] = []
+
+        if guidanceConfidence == .low {
+            flags.append("Low confidence: verify the ask before leaning on the full answer.")
+        }
+
+        if speakerReadConfidence == .low {
+            flags.append("Speaker uncertainty: the latest line may not be classified cleanly yet.")
+        }
+
+        if manualInterruptionActive {
+            flags.append("Interruption active: re-enter with one short line before expanding.")
+        }
+
+        if overlayState == .recovery {
+            flags.append("Recovery mode: stay short and confirm what they actually need.")
+        }
+
+        if generationProvider == .openAI {
+            flags.append("External provider active: sensitive context may leave the machine.")
+        }
+
+        if voiceActivityState == .speaking && teleprompterProgress > 0.72 {
+            flags.append("Answer almost landed: stop cleanly instead of adding extra detail.")
+        }
+
+        if liveContextSegments().count <= 1 && guidanceConfidence != .high {
+            flags.append("Thin context: the answer is based on a narrow conversation window.")
+        }
+
+        return Array(flags.prefix(3))
     }
 
     var coachingCue: String {
