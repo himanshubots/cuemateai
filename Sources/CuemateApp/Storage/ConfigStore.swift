@@ -17,6 +17,7 @@ struct AppState: Codable, Sendable {
     var generationProvider: GenerationProvider = .localHeuristic
     var openAIOutputMode: OpenAIOutputMode = .text
     var openAIModelProfile: OpenAIModelProfile = .test
+    var openAIKeyStored: Bool = false
     var autoResponseEnabled: Bool = true
     var memoryEnabled: Bool = true
     var excludedFromMemoryIDs: [String] = []
@@ -28,7 +29,7 @@ struct AppState: Codable, Sendable {
         case configuration, overlayContent, clickThroughEnabled, isPaused
         case overlayPinnedNearCamera, overlayAnchor, overlayHorizontalInset, overlayVerticalInset, overlayOpacity
         case confidenceMode, currentSuggestionIndex, transcriptionProvider, transcriptInterpretationMode, generationProvider
-        case openAIOutputMode, openAIModelProfile
+        case openAIOutputMode, openAIModelProfile, openAIKeyStored
         case autoResponseEnabled, memoryEnabled, excludedFromMemoryIDs, offlineModeEnabled
         case screenContextEnabled, activePlaybookID
     }
@@ -51,6 +52,7 @@ struct AppState: Codable, Sendable {
         generationProvider = (try? c.decode(GenerationProvider.self, forKey: .generationProvider)) ?? .localHeuristic
         openAIOutputMode = (try? c.decode(OpenAIOutputMode.self, forKey: .openAIOutputMode)) ?? .text
         openAIModelProfile = (try? c.decode(OpenAIModelProfile.self, forKey: .openAIModelProfile)) ?? .test
+        openAIKeyStored = (try? c.decode(Bool.self, forKey: .openAIKeyStored)) ?? false
         autoResponseEnabled = (try? c.decode(Bool.self, forKey: .autoResponseEnabled)) ?? true
         memoryEnabled = (try? c.decode(Bool.self, forKey: .memoryEnabled)) ?? true
         excludedFromMemoryIDs = (try? c.decode([String].self, forKey: .excludedFromMemoryIDs)) ?? []
@@ -64,7 +66,7 @@ struct AppState: Codable, Sendable {
          overlayAnchor: OverlayAnchor, overlayHorizontalInset: Double, overlayVerticalInset: Double, overlayOpacity: Double,
          confidenceMode: String, currentSuggestionIndex: Int,
          transcriptionProvider: TranscriptionProvider, transcriptInterpretationMode: TranscriptInterpretationMode, generationProvider: GenerationProvider,
-         openAIOutputMode: OpenAIOutputMode, openAIModelProfile: OpenAIModelProfile,
+         openAIOutputMode: OpenAIOutputMode, openAIModelProfile: OpenAIModelProfile, openAIKeyStored: Bool,
          autoResponseEnabled: Bool, memoryEnabled: Bool, excludedFromMemoryIDs: [String],
          offlineModeEnabled: Bool, screenContextEnabled: Bool, activePlaybookID: String) {
         self.configuration = configuration
@@ -83,6 +85,7 @@ struct AppState: Codable, Sendable {
         self.generationProvider = generationProvider
         self.openAIOutputMode = openAIOutputMode
         self.openAIModelProfile = openAIModelProfile
+        self.openAIKeyStored = openAIKeyStored
         self.autoResponseEnabled = autoResponseEnabled
         self.memoryEnabled = memoryEnabled
         self.excludedFromMemoryIDs = excludedFromMemoryIDs

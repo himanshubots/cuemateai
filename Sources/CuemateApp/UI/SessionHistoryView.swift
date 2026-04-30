@@ -497,33 +497,20 @@ struct SessionHistoryDetailView: View {
     let session: MeetingSessionRecord
     let documents: [IngestedDocument]
 
+    private var finalTranscriptSegments: [TranscriptSegment] {
+        Array(session.transcriptSegments.filter(\.isFinal).prefix(12))
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 headerSection
-                diagnosticsSection
 
                 if let summary = session.summary {
                     overviewSection(summary)
-                    if !summary.actionItems.isEmpty {
-                        actionItemsSection(summary.actionItems)
-                    }
-                    if !summary.decisionSummary.isEmpty {
-                        BriefSectionBox(title: "Decision") {
-                            Text(summary.decisionSummary)
-                                .font(.callout)
-                        }
-                    }
-                    followUpSection(summary)
                 }
 
-                if let brief = session.brief {
-                    storedBriefSection(brief)
-                }
-
-                if let artifact = session.followUpArtifact {
-                    savedArtifactSection(artifact)
-                }
+                transcriptSection
 
                 if !session.followUpNotes.isEmpty {
                     BriefSectionBox(title: "Notes") {
@@ -533,22 +520,6 @@ struct SessionHistoryDetailView: View {
                 }
             }
             .padding(20)
-        }
-    }
-
-    private var diagnosticsSection: some View {
-        BriefSectionBox(title: "Session Diagnostics") {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(session.diagnostics.displayItems, id: \.self) { item in
-                    HStack(alignment: .top, spacing: 6) {
-                        Text("·")
-                            .foregroundStyle(.secondary)
-                        Text(item)
-                            .font(.callout)
-                            .monospacedDigit()
-                    }
-                }
-            }
         }
     }
 
@@ -617,16 +588,10 @@ struct SessionHistoryDetailView: View {
     // MARK: Overview
 
     private func overviewSection(_ summary: MeetingSummary) -> some View {
-        BriefSectionBox(title: "Overview") {
+        BriefSectionBox(title: "Conversation") {
             VStack(alignment: .leading, spacing: 8) {
                 Text(summary.overview)
                     .font(.callout)
-                if !summary.outcomeNote.isEmpty {
-                    Divider()
-                    Label(summary.outcomeNote, systemImage: "checkmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
                 if !summary.keyTopics.isEmpty {
                     Divider()
                     HistoryTagRowView(tags: summary.keyTopics)
@@ -635,84 +600,22 @@ struct SessionHistoryDetailView: View {
         }
     }
 
-    // MARK: Action items
-
-    private func actionItemsSection(_ items: [String]) -> some View {
-        BriefSectionBox(title: "Action Items") {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(items, id: \.self) { item in
-                    HStack(alignment: .top, spacing: 6) {
-                        Text("·")
+    private var transcriptSection: some View {
+        BriefSectionBox(title: "Transcript") {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(finalTranscriptSegments) { segment in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(segment.speaker)
+                            .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        Text(item)
+                        Text(segment.text)
                             .font(.callout)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if segment.id != finalTranscriptSegments.last?.id {
+                        Divider()
                     }
                 }
-            }
-        }
-    }
-
-    // MARK: Follow-up draft
-
-    private func followUpSection(_ summary: MeetingSummary) -> some View {
-        BriefSectionBox(title: "Follow-up Draft") {
-            VStack(alignment: .leading, spacing: 6) {
-                if !summary.followUpSubject.isEmpty {
-                    HStack(spacing: 4) {
-                        Text("Subject:")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                        Text(summary.followUpSubject)
-                            .font(.caption)
-                    }
-                    Divider()
-                }
-                Text(summary.followUpDraft)
-                    .font(.callout)
-            }
-        }
-    }
-
-    // MARK: Stored pre-meeting brief (if any)
-
-    private func storedBriefSection(_ brief: MeetingBrief) -> some View {
-        BriefSectionBox(title: "Pre-meeting Brief Used") {
-            VStack(alignment: .leading, spacing: 8) {
-                HistoryLabeledRow(label: "Goal", value: brief.meetingGoal)
-                if !brief.focusAreas.isEmpty {
-                    HistoryLabeledRow(
-                        label: "Focus",
-                        value: brief.focusAreas.joined(separator: " · ")
-                    )
-                }
-                if !brief.openingFraming.isEmpty {
-                    HistoryLabeledRow(label: "Opening", value: brief.openingFraming)
-                }
-                if let note = brief.priorSessionNote {
-                    Divider()
-                    HistoryLabeledRow(label: "Prior", value: note)
-                }
-            }
-        }
-    }
-
-    // MARK: Saved follow-up artifact (if any)
-
-    private func savedArtifactSection(_ artifact: StoredFollowUpArtifact) -> some View {
-        BriefSectionBox(title: "Saved Follow-up") {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 4) {
-                    Text("Subject:")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
-                    Text(artifact.subject)
-                        .font(.caption)
-                }
-                Divider()
-                Text(artifact.body)
-                    .font(.callout)
             }
         }
     }

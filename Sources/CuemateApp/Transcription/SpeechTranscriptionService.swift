@@ -19,12 +19,14 @@ final class SpeechTranscriptionService {
 
     init() {
         recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+        recognizer?.defaultTaskHint = .dictation
     }
 
     /// Swaps the locale before the next `start()` call.
     func setLocale(_ locale: Locale) {
         let newRecognizer = SFSpeechRecognizer(locale: locale)
         recognizer = newRecognizer ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+        recognizer?.defaultTaskHint = .dictation
     }
 
     func requestPermission() async -> SpeechPermissionState {
@@ -61,9 +63,13 @@ final class SpeechTranscriptionService {
             return
         }
 
+        recognizer.defaultTaskHint = .dictation
+
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = false
+        request.taskHint = .dictation
+        request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
+        request.addsPunctuation = true
         self.request = request
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in

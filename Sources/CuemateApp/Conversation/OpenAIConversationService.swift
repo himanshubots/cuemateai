@@ -38,7 +38,8 @@ struct OpenAIConversationService: Sendable {
             messages: [
                 ChatMessage(role: "system", content: systemInstruction),
                 ChatMessage(role: "user", content: prompt)
-            ]
+            ],
+            responseFormat: ResponseFormat(type: "json_object")
         )
 
         var request = URLRequest(url: url)
@@ -110,6 +111,8 @@ struct OpenAIConversationService: Sendable {
         }()
 
         var parts = [
+            "Return only the exact short answer the user should say next.",
+            "Do not add coaching language, stage directions, or meta commentary.",
             "Keep the primary answer to 1-2 short sentences. Prefer clarity over completeness.",
             "",
             "Participants: \(you) (user) | \(participantLine)",
@@ -153,15 +156,16 @@ struct OpenAIConversationService: Sendable {
             "",
             modeGuidance,
             "",
-            "Return JSON with keys primary, why, next.",
+            "Return JSON with keys primary, why, next. Keep why and next empty unless they are truly necessary.",
         ]
         return parts.joined(separator: "\n")
     }
 
     private var systemInstruction: String {
         """
-        You are a meeting copilot. Produce one concise thing the user should say now, one short why explanation, and one follow-up next step.
-        Keep the primary answer short enough to scan instantly.
+        You are generating the exact next words the user should say aloud.
+        The primary field must be direct answer text, not advice about how to answer.
+        Avoid phrases like "a clear way to answer" or "you can say."
         Return strict JSON:
         {"primary":"...","why":"...","next":"..."}
         """
@@ -171,6 +175,13 @@ struct OpenAIConversationService: Sendable {
 private struct ChatCompletionsRequest: Codable {
     let model: String
     let messages: [ChatMessage]
+    let responseFormat: ResponseFormat
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case messages
+        case responseFormat = "response_format"
+    }
 }
 
 private struct ChatMessage: Codable {
@@ -184,4 +195,8 @@ private struct ChatCompletionsResponse: Codable {
     struct Choice: Codable {
         let message: ChatMessage
     }
+}
+
+private struct ResponseFormat: Codable {
+    let type: String
 }

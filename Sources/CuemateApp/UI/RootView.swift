@@ -1223,7 +1223,7 @@ struct SettingsWorkspaceView: View {
                     Text(model.openAIProfileSummary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("API key is stored in macOS Keychain, not in the app-state config file.")
+                    Text("Cuemate only asks Keychain for the API key when it actually needs it, so the app should stop prompting on launch.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1911,37 +1911,44 @@ struct OverlayPanelView: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                StatusDot(
-                    title: model.overlayStatusSummary,
-                    color: overlayStateColor
-                )
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
                 Spacer()
-                HStack(spacing: 8) {
-                    Text(model.detectedIntent.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.72))
-                    confidenceBadge(model.guidanceConfidence)
+                overlayControlButton(
+                    title: "Generate",
+                    systemImage: "sparkles"
+                ) {
+                    Task {
+                        await model.requestGuidanceFromCurrentTranscript()
+                    }
+                }
+                overlayControlButton(
+                    title: model.isPaused ? "Resume" : "Pause",
+                    systemImage: model.isPaused ? "play.fill" : "pause.fill"
+                ) {
+                    model.togglePause()
                 }
             }
 
-            if model.overlayState == .recovery && model.guidanceConfidence == .low {
-                recoveryHero
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Heard")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.55))
+                Text(latestHeardText)
+                    .font(.callout)
+                    .foregroundStyle(Color.white.opacity(0.82))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineLimit(3)
             }
 
-            overlayBlock(title: "Question", body: model.latestQuestionText, style: .secondary)
-            overlayBulletBlock(title: "Points", body: model.liveResponseText)
-            overlayWhyHint(model.overlayWhyText)
-            if let summary = model.recoverySummaryText {
-                overlayBlock(title: "What Happened", body: summary, style: .muted)
+            ScrollView {
+                Text(primaryAnswerText)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
             }
-            if let need = model.recoveryNeedText {
-                overlayBlock(title: "They Need", body: need, style: .muted)
-            } else {
-                overlayBlock(title: "Context", body: model.latestContextText, style: .muted)
-            }
-            overlayBlock(title: "Action", body: model.overlayActionText, style: .accent)
+            .frame(minHeight: 72, maxHeight: 180)
         }
         .padding(16)
         .background(
@@ -1955,145 +1962,34 @@ struct OverlayPanelView: View {
         .shadow(color: .black.opacity(0.18), radius: 18, x: 0, y: 10)
     }
 
-    private var recoveryHero: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Quick Recovery")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.yellow.opacity(0.9))
-            Text("Use the short answer first. Do not over-explain. Ask one clarifying question right after.")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.white)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.yellow.opacity(0.12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.yellow.opacity(0.25), lineWidth: 1)
-        )
+    private var primaryAnswerText: String {
+        let trimmed = model.liveResponseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Waiting for answer." : trimmed
     }
 
-    @ViewBuilder private func confidenceBadge(_ confidence: GuidanceConfidence) -> some View {
-        let (label, color): (String, Color) = switch confidence {
-        case .high: ("High", Color.green.opacity(0.9))
-        case .medium: ("Med", Color.yellow.opacity(0.85))
-        case .low: ("Low", Color.red.opacity(0.85))
-        }
-        Text(label)
-            .font(.caption2.weight(.bold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
+    private var latestHeardText: String {
+        let trimmed = model.latestQuestionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Waiting for transcript." : trimmed
+    }
+
+    private func overlayControlButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                Text(title)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .background(
                 Capsule(style: .continuous)
-                    .fill(color.opacity(0.15))
+                    .fill(Color.white.opacity(0.12))
             )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(color.opacity(0.35), lineWidth: 1)
-            )
+        }
+        .buttonStyle(.plain)
     }
 
-    @ViewBuilder private func overlayWhyHint(_ text: String) -> some View {
-        if !text.isEmpty {
-            HStack(spacing: 6) {
-                Image(systemName: "lightbulb.fill")
-                    .font(.caption2)
-                    .foregroundStyle(Color.white.opacity(0.45))
-                Text(text)
-                    .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.5))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func overlayBlock(title: String, body: String, style: OverlayLineStyle) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.white.opacity(0.55))
-            Text(body)
-                .font(style == .secondary ? .callout : .subheadline.weight(style == .accent ? .semibold : .regular))
-                .foregroundStyle(style.color)
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(style == .muted ? 2 : nil)
-        }
-    }
-
-    private func overlayBulletBlock(title: String, body: String) -> some View {
-        let points = compactPoints(from: body)
-
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(title.uppercased())
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.white.opacity(0.55))
-
-            ForEach(points, id: \.self) { point in
-                HStack(alignment: .top, spacing: 8) {
-                    Circle()
-                        .fill(Color.white.opacity(0.9))
-                        .frame(width: 5, height: 5)
-                        .padding(.top, 7)
-                    Text(point)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(Color.white)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-
-    private func compactPoints(from text: String) -> [String] {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return ["Waiting for guidance."] }
-
-        let sentences = trimmed
-            .split(separator: ".")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        if sentences.isEmpty {
-            return [trimmed]
-        }
-
-        return Array(sentences.prefix(2)).map { sentence in
-            sentence.hasSuffix(".") ? sentence : sentence + "."
-        }
-    }
-
-    private var overlayStateColor: Color {
-        switch model.overlayState {
-        case .recovery: .yellow
-        case .answerReady: .blue
-        case .speaking: .mint
-        case .postAnswer: .green
-        case .paused: .orange
-        case .questionDetected: .purple
-        case .listening, .idle: .gray
-        }
-    }
-}
-
-private enum OverlayLineStyle {
-    case secondary
-    case muted
-    case accent
-
-    var color: Color {
-        switch self {
-        case .secondary:
-            return .white
-        case .muted:
-            return Color.white.opacity(0.78)
-        case .accent:
-            return Color(red: 0.76, green: 0.90, blue: 1.0)
-        }
-    }
 }
 
 struct SessionDetailView: View {

@@ -281,7 +281,7 @@ enum OpenAIModelProfile: String, CaseIterable, Codable, Sendable, Identifiable {
     var summary: String {
         switch self {
         case .test:
-            "Use gpt-5-mini first for fast mixed-context testing."
+            "Use gpt-4.1-mini first for the most predictable live text-answer path."
         case .adaptive:
             "Use gpt-5-mini for product-style calls and gpt-5.1 for reasoning-heavy calls."
         }
@@ -290,7 +290,7 @@ enum OpenAIModelProfile: String, CaseIterable, Codable, Sendable, Identifiable {
     func resolvedModel(for meetingMode: MeetingMode) -> String {
         switch self {
         case .test:
-            return "gpt-5-mini"
+            return "gpt-4.1-mini"
         case .adaptive:
             switch meetingMode {
             case .interview, .internalSync:
@@ -850,7 +850,7 @@ final class AppModel: ObservableObject {
 
         bootstrapStorage()
         loadSavedState()
-        loadSecrets()
+        openAIKeyPresent = false
         loadDocumentLibrary()
         loadMeetingSessions()
         configureAudioCallbacks()
@@ -1910,7 +1910,7 @@ final class AppModel: ObservableObject {
     var openAIProfileSummary: String {
         switch openAIModelProfile {
         case .test:
-            return "Test mode uses gpt-5-mini for every call while we validate mixed-room transcript handling and overlay quality."
+            return "Test mode uses gpt-4.1-mini for every call while we validate live transcription and direct-answer quality."
         case .adaptive:
             switch meetingMode {
             case .interview, .internalSync:
@@ -2193,12 +2193,15 @@ final class AppModel: ObservableObject {
             providerStatusMessage = offlineModeEnabled ? "Offline mode — local heuristic guidance" : "Using local heuristic guidance"
             streamingResponsePreview = response.primary
         case .openAI:
-            guard let apiKey = ((try? keychainStore.load(account: "openai_api_key")) ?? nil), !apiKey.isEmpty else {
-                providerStatusMessage = "OpenAI key missing, using local heuristic guidance"
-                response = conversationEngine.generate(request: request)
+            guard let apiKey = loadOpenAIKey(), !apiKey.isEmpty else {
+                let status = "OpenAI key unavailable. Save the key again if macOS blocked access."
+                providerStatusMessage = status
+                overlayContent = OverlayContent(nowSay: status, why: "", next: "")
+                guidanceConfidence = .low
+                overlayState = .answerReady
                 recordSessionDiagnostic(.providerFallback)
-                streamingResponsePreview = response.primary
-                break
+                appendLog("OpenAI key unavailable for generation")
+                return
             }
             do {
                 response = try await openAIConversationService.generate(
@@ -2212,11 +2215,18 @@ final class AppModel: ObservableObject {
                 providerStatusMessage = "Using OpenAI API (\(selectedOpenAIModel), \(openAIOutputMode.title.lowercased()))"
                 streamingResponsePreview = response.primary
             } catch {
-                providerStatusMessage = "OpenAI failed, using local heuristic guidance"
+                let detail = compactOpenAIErrorMessage(error)
+                providerStatusMessage = detail
                 appendLog("OpenAI generation failed: \(error.localizedDescription)")
-                response = conversationEngine.generate(request: request)
+                overlayContent = OverlayContent(
+                    nowSay: detail,
+                    why: "",
+                    next: ""
+                )
+                guidanceConfidence = .low
+                overlayState = .answerReady
                 recordSessionDiagnostic(.providerFallback)
-                streamingResponsePreview = response.primary
+                return
             }
         case .ollama:
             do {
@@ -2666,6 +2676,7 @@ final class AppModel: ObservableObject {
             openAIOutputMode = state.openAIOutputMode
             openAIModelProfile = state.openAIModelProfile
             autoResponseEnabled = state.autoResponseEnabled
+            openAIKeyPresent = state.openAIKeyStored
             if transcriptionProvider == .appleSpeech {
                 transcriptInterpretationMode = .sharedRoom
                 autoResponseEnabled = false
@@ -2699,6 +2710,7 @@ final class AppModel: ObservableObject {
             generationProvider: generationProvider,
             openAIOutputMode: openAIOutputMode,
             openAIModelProfile: openAIModelProfile,
+            openAIKeyStored: openAIKeyPresent,
             autoResponseEnabled: autoResponseEnabled,
             memoryEnabled: memoryEnabled,
             excludedFromMemoryIDs: excludedFromMemoryIDs.map(\.uuidString),
@@ -2788,14 +2800,6 @@ final class AppModel: ObservableObject {
         saveMeetingSessions()
     }
 
-    private func loadSecrets() {
-        if let value = ((try? keychainStore.load(account: "openai_api_key")) ?? nil) {
-            openAIKeyPresent = !value.isEmpty
-        } else {
-            openAIKeyPresent = false
-        }
-    }
-
     func saveOpenAIKey(_ key: String) {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -2804,6 +2808,7 @@ final class AppModel: ObservableObject {
             openAIKeyPresent = false
             providerStatusMessage = "OpenAI key removed"
             appendLog("Removed OpenAI API key from Keychain")
+            persistState()
             return
         }
 
@@ -2812,10 +2817,41 @@ final class AppModel: ObservableObject {
             openAIKeyPresent = true
             providerStatusMessage = "OpenAI key saved in Keychain"
             appendLog("Saved OpenAI API key to Keychain")
+            persistState()
         } catch {
             providerStatusMessage = "Failed to save OpenAI key"
             appendLog("Failed to save OpenAI API key: \(error.localizedDescription)")
         }
+    }
+
+    private func loadOpenAIKey() -> String? {
+        do {
+            let value = try keychainStore.load(account: "openai_api_key")
+            let present = !(value?.isEmpty ?? true)
+            if openAIKeyPresent != present {
+                openAIKeyPresent = present
+                persistState()
+            }
+            return value
+        } catch {
+            openAIKeyPresent = false
+            appendLog("Failed to load OpenAI API key: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func compactOpenAIErrorMessage(_ error: Error) -> String {
+        let raw = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else {
+            return "OpenAI request failed."
+        }
+
+        if raw.count <= 220 {
+            return raw
+        }
+
+        let shortened = raw.prefix(220).trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(shortened)..."
     }
 
     private func startActiveTranscriptionProvider() {
@@ -3004,7 +3040,7 @@ final class AppModel: ObservableObject {
         case .ollama:
             return .ollama(model: "qwen3:4b")
         case .openAI:
-            if let apiKey = ((try? keychainStore.load(account: "openai_api_key")) ?? nil), !apiKey.isEmpty {
+            if let apiKey = loadOpenAIKey(), !apiKey.isEmpty {
                 return .openAI(apiKey: apiKey, model: "gpt-5.4-mini")
             }
             return .heuristicOnly
@@ -3518,7 +3554,7 @@ final class AppModel: ObservableObject {
         let hasSentenceEnd = lower.hasSuffix(".") || lower.hasSuffix("?") || lower.hasSuffix("!")
 
         if directQuestion {
-            return wordCount >= 4
+            return wordCount >= 3
         }
 
         if intent != .general && wordCount >= 5 && !isTrailingFragment(trimmed) {
@@ -4000,12 +4036,26 @@ final class AppModel: ObservableObject {
             return true
         }
 
+        let words = normalizedWords(from: lowered)
+        if let first = words.first {
+            let interrogatives: Set<String> = [
+                "what", "why", "how", "when", "where", "who",
+                "is", "are", "am", "do", "does", "did",
+                "can", "could", "would", "will", "should"
+            ]
+            if interrogatives.contains(first) {
+                return true
+            }
+        }
+
         let cues = [
             "can you",
             "could you",
             "would you",
             "what do you think",
             "how would you",
+            "what is",
+            "what are",
             "what's your view",
             "tell us",
             "walk us through"
